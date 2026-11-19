@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Docksie
+Comment=Edit Docker Compose files
+Comment[de]=Docker-Compose-Dateien bearbeiten
+Exec=docksie %f
+Icon=io.docksie.app
+Terminal=false
+Type=Application
+Categories=Development;
+MimeType=application/yaml;

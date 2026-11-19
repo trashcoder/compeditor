@@ -1,0 +1,43 @@
+# Docksie example
+services:
+  gateway:
+    image: nginx:1.27-alpine # reverse proxy
+    ports:
+      - "127.0.0.1:8080:80" # local development
+      - name: metrics
+        target: 9113
+        published: "9113"
+        protocol: tcp
+        host_ip: 127.0.0.1
+    environment:
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      EMPTY: ""
+      PROXY_MODE:
+    depends_on:
+      - cache
+    networks:
+      - internal
+  cache:
+    image: redis:7-alpine
+    environment:
+      - "CACHE_MODE=local"
+      - "CACHE_TAG="
+      - CACHE_TRACE
+    volumes:
+      - cache-data:/data
+    networks:
+      - internal
+  worker:
+    build:
+      context: ./worker
+    depends_on:
+      cache:
+        condition: service_started
+    networks:
+      - internal
+volumes:
+  cache-data:
+networks:
+  internal:
+x-docksie-example:
+  keep: true

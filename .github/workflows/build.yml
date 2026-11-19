@@ -1,0 +1,67 @@
+name: Build Docksie
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            package: appimage
+            artifact: linux-x86_64
+            files: dist/*.AppImage
+          - runner: macos-15
+            package: dmg
+            artifact: macos-arm64
+            files: target/release/*.dmg
+          - runner: macos-15-intel
+            package: dmg
+            artifact: macos-x86_64
+            files: target/release/*.dmg
+          - runner: windows-2025
+            package: nsis
+            artifact: windows-x86_64
+            files: target/release/*setup.exe
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+        shell: bash
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl1-mesa-dev desktop-file-utils xvfb
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - name: Build AppImage
+        if: runner.os == 'Linux'
+        run: scripts/package-appimage.sh
+      - name: Smoke test AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          status=0
+          timeout 15s xvfb-run -a env APPIMAGE_EXTRACT_AND_RUN=1 dist/Docksie-0.1.0-x86_64.AppImage examples/compose.yaml || status=$?
+          test "$status" -eq 124
+      - name: Install desktop packager
+        if: runner.os != 'Linux'
+        run: cargo install cargo-packager --version 0.11.8 --locked
+      - name: Build native package
+        if: runner.os != 'Linux'
+        run: cargo packager --release --formats ${{ matrix.package }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Docksie-${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error

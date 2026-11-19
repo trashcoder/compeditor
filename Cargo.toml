@@ -1,0 +1,28 @@
+[package]
+name = "docksie"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+eframe = { version = "0.31.1", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+rfd = "0.15.4"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+rowan = "0.16"
+tempfile = "3.27"
+yaml-edit = "0.3.6"
+
+[package.metadata.packager]
+product-name = "Docksie"
+identifier = "io.docksie.app"
+description = "Graphical Docker Compose editor"
+category = "DeveloperTool"
+icons = ["assets/icon.png"]
+out-dir = "target/release"
+binaries = [{ path = "docksie", main = true }]
+
+[package.metadata.packager.nsis]
+installer-icon = "assets/icon.ico"
+languages = ["English", "German"]
