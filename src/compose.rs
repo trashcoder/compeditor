@@ -1438,38 +1438,41 @@ mod tests {
 
     #[test]
     fn updates_image_and_each_port_form_while_preserving_unrelated_yaml() {
-        let (_temp, mut doc) = fixture(EXAMPLE);
-        doc.edit(0, Edit::Image(Some("nginx:${TAG:-alpine}".into())))
+        let lf_example = EXAMPLE.replace("\r\n", "\n");
+        let crlf_example = lf_example.replace('\n', "\r\n");
+        for example in [&lf_example, &crlf_example] {
+            let (_temp, mut doc) = fixture(example);
+            doc.edit(0, Edit::Image(Some("nginx:${TAG:-alpine}".into())))
+                .unwrap();
+            doc.edit(
+                0,
+                Edit::Port(Some(0), Port::Short("127.0.0.1:8181:80".into())),
+            )
             .unwrap();
-        doc.edit(
-            0,
-            Edit::Port(Some(0), Port::Short("127.0.0.1:8181:80".into())),
-        )
-        .unwrap();
-        let Port::Long(mut port) = doc.services[0].ports[1].clone() else {
-            panic!("long port expected")
-        };
-        port.published = "9180".into();
-        doc.edit(0, Edit::Port(Some(1), Port::Long(port))).unwrap();
-        assert_eq!(
-            &doc.source[doc.source.find("  cache:\n").unwrap()..],
-            &EXAMPLE[EXAMPLE.find("  cache:\n").unwrap()..]
-        );
-        assert!(doc.source.contains("# reverse proxy"));
-        assert!(doc.source.contains("# local development"));
-        assert!(doc.source.contains("name: metrics"));
-        assert!(doc.source.contains("${LOG_LEVEL:-info}"));
-        doc.save(doc.path.clone()).unwrap();
-        assert!(!doc.dirty());
-        let reopened = Compose::open(&doc.path).unwrap();
-        assert_eq!(
-            reopened.services[0].image.as_deref(),
-            Some("nginx:${TAG:-alpine}")
-        );
-        assert_eq!(
-            reopened.services[0].ports[0],
-            Port::Short("127.0.0.1:8181:80".into())
-        );
+            let Port::Long(mut port) = doc.services[0].ports[1].clone() else {
+                panic!("long port expected")
+            };
+            port.published = "9180".into();
+            doc.edit(0, Edit::Port(Some(1), Port::Long(port))).unwrap();
+            let (_, expected_tail) = example.split_once("\n  cache:").unwrap();
+            let (_, actual_tail) = doc.source.split_once("\n  cache:").unwrap();
+            assert_eq!(actual_tail, expected_tail);
+            assert!(doc.source.contains("# reverse proxy"));
+            assert!(doc.source.contains("# local development"));
+            assert!(doc.source.contains("name: metrics"));
+            assert!(doc.source.contains("${LOG_LEVEL:-info}"));
+            doc.save(doc.path.clone()).unwrap();
+            assert!(!doc.dirty());
+            let reopened = Compose::open(&doc.path).unwrap();
+            assert_eq!(
+                reopened.services[0].image.as_deref(),
+                Some("nginx:${TAG:-alpine}")
+            );
+            assert_eq!(
+                reopened.services[0].ports[0],
+                Port::Short("127.0.0.1:8181:80".into())
+            );
+        }
     }
 
     #[test]
