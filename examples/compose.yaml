@@ -1,4 +1,4 @@
-# Docksie example
+# CompEditor example
 services:
   gateway:
     image: nginx:1.27-alpine # reverse proxy
@@ -39,5 +39,5 @@ volumes:
   cache-data:
 networks:
   internal:
-x-docksie-example:
+x-compeditor-example:
   keep: true

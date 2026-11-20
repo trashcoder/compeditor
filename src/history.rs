@@ -255,7 +255,7 @@ impl History {
     pub fn sidecar_path(compose: &Path) -> PathBuf {
         let mut filename = OsString::from(".");
         filename.push(compose.file_name().unwrap_or_default());
-        filename.push(".docksie-history.json");
+        filename.push(".compeditor-history.json");
         compose.with_file_name(filename)
     }
 

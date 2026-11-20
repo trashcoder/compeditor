@@ -551,6 +551,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "compeditor"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "eframe",
+ "reqwest",
+ "rfd",
+ "rowan",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "yaml-edit",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -677,21 +692,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
  "libloading",
-]
-
-[[package]]
-name = "docksie"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "eframe",
- "reqwest",
- "rfd",
- "rowan",
- "serde",
- "serde_json",
- "tempfile",
- "yaml-edit",
 ]
 
 [[package]]

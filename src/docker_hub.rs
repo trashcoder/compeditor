@@ -262,7 +262,7 @@ pub fn fetch(reference: &ImageReference) -> Result<DockerHubInfo, String> {
         reference.namespace, reference.repository
     );
     let response = reqwest::blocking::Client::builder()
-        .user_agent(concat!("Docksie/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("CompEditor/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(8))
         .build()
         .map_err(|_| "network".to_owned())?
@@ -286,7 +286,7 @@ pub fn fetch_tags(reference: &ImageReference) -> Result<Vec<DockerHubTag>, Strin
         reference.namespace, reference.repository
     );
     let client = reqwest::blocking::Client::builder()
-        .user_agent(concat!("Docksie/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("CompEditor/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(8))
         .build()
         .map_err(|_| "network".to_owned())?;

@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 tool=${APPIMAGETOOL:-"$PWD/target/appimagetool-x86_64.AppImage"}
-binary=${DOCKSIE_BINARY:-"$PWD/target/release/docksie"}
+binary=${COMPEDITOR_BINARY:-"$PWD/target/release/compeditor"}
 runtime=${APPIMAGE_RUNTIME:-"$PWD/target/appimage-runtime-x86_64"}
 if [[ ! -x "$tool" ]]; then
     mkdir -p "$(dirname "$tool")"
@@ -22,16 +22,16 @@ if [[ ! -s "$runtime" ]]; then
 fi
 
 mkdir -p target dist
-appdir=$(mktemp -d "$PWD/target/docksie.AppDir.XXXXXX")
+appdir=$(mktemp -d "$PWD/target/compeditor.AppDir.XXXXXX")
 trap 'rm -r -- "$appdir"' EXIT
-install -D -m 755 "$binary" "$appdir/usr/bin/docksie"
-install -m 644 assets/io.docksie.app.desktop "$appdir/io.docksie.app.desktop"
-install -m 644 assets/icon.png "$appdir/io.docksie.app.png"
-ln -s io.docksie.app.png "$appdir/.DirIcon"
+install -D -m 755 "$binary" "$appdir/usr/bin/compeditor"
+install -m 644 assets/io.compeditor.app.desktop "$appdir/io.compeditor.app.desktop"
+install -m 644 assets/icon.png "$appdir/io.compeditor.app.png"
+ln -s io.compeditor.app.png "$appdir/.DirIcon"
 cat > "$appdir/AppRun" <<'APPRUN'
 #!/bin/sh
-exec "$(dirname "$(readlink -f "$0")")/usr/bin/docksie" "$@"
+exec "$(dirname "$(readlink -f "$0")")/usr/bin/compeditor" "$@"
 APPRUN
 chmod +x "$appdir/AppRun"
 
-ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" --no-appstream --runtime-file "$runtime" "$appdir" "$PWD/dist/Docksie-0.1.0-x86_64.AppImage"
+ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" --no-appstream --runtime-file "$runtime" "$appdir" "$PWD/dist/CompEditor-0.1.0-x86_64.AppImage"

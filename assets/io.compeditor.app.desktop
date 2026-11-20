@@ -1,9 +1,9 @@
 [Desktop Entry]
-Name=Docksie
+Name=CompEditor
 Comment=Edit Docker Compose files
 Comment[de]=Docker-Compose-Dateien bearbeiten
-Exec=docksie %f
-Icon=io.docksie.app
+Exec=compeditor %f
+Icon=io.compeditor.app
 Terminal=false
 Type=Application
 Categories=Development;

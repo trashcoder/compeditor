@@ -327,10 +327,11 @@ impl App {
         }
     }
 
-    fn open_resource(&mut self, kind: ResourceKind, name: String) {
-        self.selected = None;
+    pub(super) fn open_resource(&mut self, kind: ResourceKind, name: String) {
         self.project_tab = ProjectTab::Resources(kind);
         self.resource_focus = Some(name);
+        self.resource_query.clear();
+        self.navigation_open = false;
         self.jump_to_resource = true;
     }
 }

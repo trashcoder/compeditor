@@ -8,12 +8,14 @@ mod history;
 mod storage;
 mod yaml_format;
 
+const APP_NAME: &str = "CompEditor";
+
 fn main() -> eframe::Result {
     let path = std::env::args_os().nth(1).map(std::path::PathBuf::from);
     let mut viewport = eframe::egui::ViewportBuilder::default()
         .with_inner_size([1080.0, 720.0])
         .with_min_inner_size([540.0, 400.0])
-        .with_app_id("io.docksie.app");
+        .with_app_id("io.compeditor.app");
     if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")) {
         viewport = viewport.with_icon(icon);
     }
@@ -22,7 +24,7 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "Docksie",
+        APP_NAME,
         options,
         Box::new(|cc| Ok(Box::new(app::App::new(&cc.egui_ctx, path)))),
     )

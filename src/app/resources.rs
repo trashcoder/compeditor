@@ -1,4 +1,4 @@
-use super::{App, Form, ProjectEdit, ProjectTab};
+use super::{App, Form, ProjectEdit, section};
 use crate::{
     compose::{Resource, ResourceInput, ResourceKind, ResourceSettings},
     storage::Language,
@@ -123,143 +123,124 @@ impl ResourceForm {
 }
 
 impl App {
+    pub(super) fn selected_resource(&self, kind: ResourceKind) -> Option<&Resource> {
+        let entries = &self.document.as_ref()?.resources.list(kind).entries;
+        self.resource_focus
+            .as_deref()
+            .and_then(|key| entries.iter().find(|resource| resource.key == key))
+            .or_else(|| entries.first())
+    }
+
     pub(super) fn resource_view(&mut self, ui: &mut Ui, kind: ResourceKind) {
         let language = self.language;
         let t = |de, en| language.text(de, en);
-        let Some(document) = self.document.as_ref() else {
+        let Some(resource) = self.selected_resource(kind).cloned() else {
+            let title = match kind {
+                ResourceKind::Network => t("Keine Netzwerke", "No networks"),
+                ResourceKind::Volume => t("Keine Volumes", "No volumes"),
+            };
+            section(ui, title, |ui| {
+                ui.label(t(
+                    "Füge eine Definition in der Projektleiste hinzu.",
+                    "Add a definition in the project sidebar.",
+                ));
+            });
             return;
         };
-        let list = document.resources.list(kind);
-        let entries = list.entries.clone();
-        let can_add = list.can_add;
-        let unknown_usage = list.unknown_usage;
-
-        ui.heading(kind.title(language));
-        if document.dirty() {
-            ui.label(RichText::new(t("Ungespeichert", "Unsaved")).color(super::ACCENT));
-        }
-        ui.horizontal(|ui| {
-            if ui.add_enabled(can_add, egui::Button::new(t("+ Hinzufügen", "+ Add"))).clicked() {
-                self.start_form(Form::Resource(ResourceForm::new(kind, String::new(), None, true)), ui.ctx());
+        let unknown_usage = self
+            .document
+            .as_ref()
+            .is_some_and(|document| document.resources.list(kind).unknown_usage);
+        let heading =
+            ui.add(egui::Label::new(RichText::new(&resource.key).size(32.0).strong()).truncate());
+        heading.on_hover_text(&resource.key);
+        ui.separator();
+        section(ui, t("Definition", "Definition"), |ui| {
+            if let Some(settings) = &resource.settings {
+                if !settings.name.is_empty() {
+                    ui.label(format!("Docker: {}", settings.name));
+                }
+                if !settings.driver.is_empty() {
+                    ui.label(format!("{}: {}", t("Treiber", "Driver"), settings.driver));
+                }
+                if settings.external {
+                    ui.label(t("Extern", "External"));
+                }
             }
-            if !can_add {
-                ui.label(RichText::new(t("Definitionen sind aufgrund geteilter, geerbter oder nicht unterstützter YAML-Werte schreibgeschützt.", "Definitions are read-only because the YAML uses shared, inherited, or unsupported values.")).weak());
-            }
-        });
-
-        if entries.is_empty() {
-            ui.label(RichText::new(t("Keine Definitionen", "No definitions")).weak());
-        }
-        for resource in &entries {
-            let selected = self.resource_focus.as_deref() == Some(resource.key.as_str());
-            let card = ui.push_id(&resource.key, |ui| {
-                egui::Frame::group(ui.style()).show(ui, |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        if ui
-                            .selectable_label(selected, RichText::new(&resource.key).strong())
-                            .clicked()
-                        {
-                            self.resource_focus = Some(resource.key.clone());
-                        }
-                        if let Some(settings) = &resource.settings {
-                            if !settings.name.is_empty() {
-                                ui.label(format!("Docker: {}", settings.name));
-                            }
-                            if !settings.driver.is_empty() {
-                                ui.label(format!(
-                                    "{}: {}",
-                                    t("Treiber", "Driver"),
-                                    settings.driver
-                                ));
-                            }
-                            if settings.external {
-                                ui.label(t("Extern", "External"));
-                            }
-                        }
-                        if !resource.editable {
-                            ui.label(RichText::new(t("Schreibgeschützt", "Read-only")).weak());
-                        }
+            let reason = if !resource.used_by.is_empty() {
+                Some(t(
+                    "Diese Ressource wird von Services verwendet.",
+                    "This resource is used by services.",
+                ))
+            } else if unknown_usage {
+                Some(t(
+                    "Die Verwendung konnte nicht sicher ermittelt werden.",
+                    "Resource usage could not be determined safely.",
+                ))
+            } else if !resource.editable {
+                Some(t(
+                    "Diese Definition ist schreibgeschützt.",
+                    "This definition is read-only.",
+                ))
+            } else {
+                None
+            };
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .add_enabled(
+                        resource.editable,
+                        egui::Button::new(t("Bearbeiten", "Edit")),
+                    )
+                    .clicked()
+                {
+                    self.start_form(
+                        Form::Resource(ResourceForm::new(
+                            kind,
+                            resource.key.clone(),
+                            Some(&resource),
+                            false,
+                        )),
+                        ui.ctx(),
+                    );
+                }
+                let remove = ui.add_enabled(
+                    reason.is_none(),
+                    egui::Button::new(t("Entfernen", "Remove")),
+                );
+                if let Some(reason) = reason {
+                    remove.on_disabled_hover_text(reason);
+                } else if remove.clicked() {
+                    self.apply_project(ProjectEdit::Resource {
+                        kind,
+                        key: resource.key.clone(),
+                        add: false,
+                        value: None,
                     });
-                    if !resource.used_by.is_empty() {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(t("Verwendet von:", "Used by:"));
-                            for service in &resource.used_by {
-                                if ui.link(service).clicked() {
-                                    self.selected = self.document.as_ref().and_then(|doc| {
-                                        doc.services.iter().position(|item| item.name == *service)
-                                    });
-                                    self.project_tab = ProjectTab::Services;
-                                    self.resource_focus = None;
-                                }
-                            }
-                        });
-                    }
-                    if selected {
-                        ui.horizontal_wrapped(|ui| {
-                            if ui
-                                .add_enabled(
-                                    resource.editable,
-                                    egui::Button::new(t("Bearbeiten", "Edit")),
-                                )
-                                .clicked()
-                            {
-                                self.start_form(
-                                    Form::Resource(ResourceForm::new(
-                                        kind,
-                                        resource.key.clone(),
-                                        Some(resource),
-                                        false,
-                                    )),
-                                    ui.ctx(),
-                                );
-                            }
-                            let protected =
-                                !resource.used_by.is_empty() || unknown_usage || !resource.editable;
-                            let remove = ui.add_enabled(
-                                !protected,
-                                egui::Button::new(t("Entfernen", "Remove")),
-                            );
-                            if protected {
-                                let reason = if !resource.used_by.is_empty() {
-                                    t(
-                                        "Diese Ressource wird von Services verwendet.",
-                                        "This resource is used by services.",
-                                    )
-                                } else if unknown_usage {
-                                    t(
-                                        "Die Verwendung konnte nicht sicher ermittelt werden.",
-                                        "Resource usage could not be determined safely.",
-                                    )
-                                } else {
-                                    t(
-                                        "Diese Definition ist schreibgeschützt.",
-                                        "This definition is read-only.",
-                                    )
-                                };
-                                remove.on_hover_text(reason);
-                                ui.label(RichText::new(reason).weak());
-                            } else if remove.clicked() {
-                                self.apply_project(ProjectEdit::Resource {
-                                    kind,
-                                    key: resource.key.clone(),
-                                    add: false,
-                                    value: None,
-                                });
-                            }
-                        });
-                        ui.collapsing(t("YAML", "YAML"), |ui| {
-                            ui.code(resource.yaml.clone());
-                        });
-                    }
-                })
+                }
             });
-            if selected && self.jump_to_resource {
-                card.response.scroll_to_me(Some(egui::Align::Center));
-                self.jump_to_resource = false;
+            if let Some(reason) = reason {
+                ui.label(RichText::new(reason).weak());
             }
-        }
-        if unknown_usage {
-            ui.label(RichText::new(t("Entfernen ist deaktiviert, weil eine Referenz nicht sicher ausgewertet werden konnte.", "Removal is disabled because a reference could not be evaluated safely.")).weak());
+            ui.collapsing("YAML", |ui| ui.code(&resource.yaml));
+        });
+        if !resource.used_by.is_empty() {
+            section(ui, t("Verwendet von", "Used by"), |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for service in &resource.used_by {
+                        if ui.link(service).clicked()
+                            && let Some(index) = self.document.as_ref().and_then(|document| {
+                                document
+                                    .services
+                                    .iter()
+                                    .position(|item| item.name == *service)
+                            })
+                        {
+                            self.service_tab = super::ServiceTab::Configuration;
+                            self.select_service(index);
+                        }
+                    }
+                });
+            });
         }
     }
 }

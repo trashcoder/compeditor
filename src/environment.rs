@@ -1,5 +1,10 @@
 use crate::storage;
-use std::{collections::BTreeMap, fs, io, ops::Range, path::Path};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fs, io,
+    ops::Range,
+    path::Path,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Preview {
@@ -12,6 +17,27 @@ pub struct EnvFile {
     source: String,
     pub values: BTreeMap<String, Preview>,
     spans: BTreeMap<String, Range<usize>>,
+    dependencies: BTreeMap<String, Vec<String>>,
+}
+
+impl EnvFile {
+    pub(crate) fn unused_variables<'a>(&'a self, mut used: HashSet<&'a str>) -> HashSet<&'a str> {
+        let mut pending: Vec<_> = used.iter().copied().collect();
+        while let Some(name) = pending.pop() {
+            if let Some(dependencies) = self.dependencies.get(name) {
+                for dependency in dependencies {
+                    if used.insert(dependency) {
+                        pending.push(dependency);
+                    }
+                }
+            }
+        }
+        self.values
+            .keys()
+            .map(String::as_str)
+            .filter(|name| !used.contains(name))
+            .collect()
+    }
 }
 
 pub enum Environment {
@@ -217,23 +243,32 @@ fn parse_dotenv(source: &str) -> Result<EnvFile, usize> {
         let Some(raw) = raw else {
             file.values.remove(name);
             file.spans.remove(name);
+            file.dependencies.remove(name);
             continue;
         };
         let trimmed = raw.trim_start();
         let start = offset + original.len() - trimmed.len();
-        let (value, span) = match trimmed.chars().next() {
+        let (value, span, dependencies) = match trimmed.chars().next() {
             Some(quote @ ('\'' | '"')) => {
                 let (text, end) =
                     quoted_value(quote, &trimmed[1..], start + 1, &mut lines).ok_or(index + 1)?;
-                let value = if quote == '\'' {
-                    Preview {
-                        text,
-                        unresolved: false,
-                    }
+                if quote == '\'' {
+                    (
+                        Preview {
+                            text,
+                            unresolved: false,
+                        },
+                        start..end,
+                        Vec::new(),
+                    )
                 } else {
-                    expand(&text, &|name| file.values.get(name).cloned(), 0)
-                };
-                (value, start..end)
+                    let value = expand(&text, &|name| file.values.get(name).cloned(), 0);
+                    (
+                        value,
+                        start..end,
+                        references(&text).into_iter().map(str::to_owned).collect(),
+                    )
+                }
             }
             _ => {
                 let content = raw
@@ -250,11 +285,16 @@ fn parse_dotenv(source: &str) -> Result<EnvFile, usize> {
                     start
                 };
                 let value = expand(content, &|name| file.values.get(name).cloned(), 0);
-                (value, start..start + content.len())
+                (
+                    value,
+                    start..start + content.len(),
+                    references(content).into_iter().map(str::to_owned).collect(),
+                )
             }
         };
         file.values.insert(name.to_owned(), value);
         file.spans.insert(name.to_owned(), span);
+        file.dependencies.insert(name.to_owned(), dependencies);
     }
     Ok(file)
 }
@@ -297,21 +337,35 @@ fn quoted_value<'a>(
     }
 }
 
-pub fn references(mut input: &str) -> Vec<&str> {
+pub fn references(input: &str) -> Vec<&str> {
     let mut names = Vec::new();
-    while let Some((_, tail)) = input.split_once('$') {
-        if let Some(rest) = tail.strip_prefix('$') {
-            input = rest;
-            continue;
-        }
-        let tail = tail.strip_prefix('{').unwrap_or(tail);
-        let name = variable_name(tail);
-        if !name.is_empty() && !names.contains(&name) {
+    for range in reference_occurrences(input) {
+        let name = &input[range];
+        if !names.contains(&name) {
             names.push(name);
         }
-        input = &tail[name.len()..];
     }
     names
+}
+
+pub(crate) fn reference_occurrences(input: &str) -> impl Iterator<Item = Range<usize>> + '_ {
+    let mut remaining = input;
+    std::iter::from_fn(move || {
+        while let Some((_, tail)) = remaining.split_once('$') {
+            if let Some(rest) = tail.strip_prefix('$') {
+                remaining = rest;
+                continue;
+            }
+            let tail = tail.strip_prefix('{').unwrap_or(tail);
+            let name = variable_name(tail);
+            remaining = &tail[name.len()..];
+            if !name.is_empty() {
+                let start = input.len() - tail.len();
+                return Some(start..start + name.len());
+            }
+        }
+        None
+    })
 }
 
 fn name_start(byte: u8) -> bool {
@@ -329,7 +383,7 @@ fn variable_name(input: &str) -> &str {
     &input[..input.bytes().take_while(|byte| name_char(*byte)).count()]
 }
 
-fn closing_brace(input: &str) -> Option<usize> {
+pub(crate) fn closing_brace(input: &str) -> Option<usize> {
     let mut depth = 0;
     for (index, byte) in input.bytes().enumerate() {
         match byte {

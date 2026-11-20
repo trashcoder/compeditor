@@ -66,7 +66,7 @@ pub fn config_path() -> Option<PathBuf> {
             .filter(|path| path.is_absolute())
             .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
     };
-    base.map(|path| path.join("docksie").join("language"))
+    base.map(|path| path.join("compeditor").join("language"))
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn language_round_trip_and_fallback() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("docksie").join("language");
+        let path = directory.path().join("compeditor").join("language");
         assert_eq!(Language::load(Some(&path)), Language::German);
         Language::English.save(Some(&path)).unwrap();
         assert_eq!(Language::load(Some(&path)), Language::English);

@@ -4,4 +4,4 @@ build/
 .env
 .env.*
 !.env.example
-.*.docksie-history.json
+.*.compeditor-history.json

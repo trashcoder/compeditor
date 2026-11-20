@@ -3,12 +3,13 @@ mod parameters;
 pub use parameters::*;
 
 use crate::{
-    environment::{Environment, SaveError},
+    environment::{self, Environment, SaveError},
     history::{Change, Draft, EnvSnapshot, History, Operation, Target},
     storage::{self, Language},
     yaml_format,
 };
 use std::{
+    cell::OnceCell,
     collections::HashSet,
     fs, io,
     io::Write,
@@ -55,7 +56,7 @@ impl Error {
             Self::UsageUncertain => t("Die Nutzung lässt sich wegen externer oder dynamischer Verweise nicht sicher prüfen.", "Usage cannot be verified because of external or dynamic references.").into(),
             Self::Protected => t("Dieses Feld ist schreibgeschützt.", "This field is read-only.").into(),
             Self::Input(de, en) => t(de, en).into(),
-            Self::Conflict => t("Die Datei wurde außerhalb von Docksie geändert. Sichere deine Fassung über „Speichern unter“.", "The file changed outside Docksie. Use Save As to keep your version.").into(),
+            Self::Conflict => t("Die Datei wurde außerhalb von CompEditor geändert. Sichere deine Fassung über „Speichern unter“.", "The file changed outside CompEditor. Use Save As to keep your version.").into(),
             Self::ProjectExists(files) => format!("{} {files}", t("Im ausgewählten Ordner sind bereits Dateien vorhanden:", "The selected folder already contains:")),
             Self::RestoreConflict => t("Die YAML- oder .env-Datei wurde extern geändert. Öffne die Compose-Datei erneut, bevor du einen Stand wiederherstellst.", "The YAML or .env file changed externally. Reopen the Compose file before restoring a version.").into(),
             Self::RestorePartial => t("Die Wiederherstellung wurde unterbrochen. Öffne die Compose-Datei erneut, um den Stand auf der Festplatte zu sehen.", "Restoration was interrupted. Reopen the Compose file to see the state on disk.").into(),
@@ -135,11 +136,37 @@ pub enum Edit {
     RemoveVariable(usize),
 }
 
+#[derive(Default)]
+struct EnvironmentUsage {
+    names: HashSet<String>,
+    env_files: Vec<String>,
+}
+
+// These Compose settings can be read from .env without a YAML reference.
+const COMPOSE_ENV_SETTINGS: &[&str] = &[
+    "COMPOSE_ANSI",
+    "COMPOSE_CONVERT_WINDOWS_PATHS",
+    "COMPOSE_DISABLE_ENV_FILE",
+    "COMPOSE_ENV_FILES",
+    "COMPOSE_EXPERIMENTAL",
+    "COMPOSE_FILE",
+    "COMPOSE_IGNORE_ORPHANS",
+    "COMPOSE_MENU",
+    "COMPOSE_PARALLEL_LIMIT",
+    "COMPOSE_PATH_SEPARATOR",
+    "COMPOSE_PROFILES",
+    "COMPOSE_PROGRESS",
+    "COMPOSE_PROJECT_NAME",
+    "COMPOSE_REMOVE_ORPHANS",
+    "COMPOSE_STATUS_STDOUT",
+];
+
 pub struct Compose {
     pub path: PathBuf,
     original: String,
     source: String,
     needs_formatting: bool,
+    environment_usage: OnceCell<EnvironmentUsage>,
     pub services: Vec<Service>,
     pub has_include: bool,
     pub resources: Resources,
@@ -160,15 +187,10 @@ impl Compose {
         let path = directory.join("docker-compose.yml");
         let env_path = directory.join(".env");
         let history_path = History::sidecar_path(&path);
-        let targets = [
-            (&path, "docker-compose.yml"),
-            (&env_path, ".env"),
-            (&history_path, ".docker-compose.yml.docksie-history.json"),
-        ];
         let mut existing = Vec::new();
-        for (target, name) in targets {
+        for target in [&path, &env_path, &history_path] {
             match fs::symlink_metadata(target) {
-                Ok(_) => existing.push(name),
+                Ok(_) => existing.push(target.file_name().unwrap_or_default().to_string_lossy()),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}
                 Err(error) => return Err(error.into()),
             }
@@ -236,10 +258,47 @@ impl Compose {
             original: source.clone(),
             source,
             needs_formatting: needs_formatting(&file),
+            environment_usage: OnceCell::new(),
             services,
             has_include,
             resources,
         })
+    }
+
+    pub fn unused_environment_variables(&self) -> HashSet<&str> {
+        let Environment::Loaded(dotenv) = &self.environment else {
+            return HashSet::new();
+        };
+        let usage = self.environment_usage.get_or_init(|| {
+            let mut usage = EnvironmentUsage::default();
+            if let Ok(file) = parse(&self.source)
+                && let Some(document) = file.document()
+                && let Some(root) = document.as_mapping()
+            {
+                let registry = AnchorRegistry::from_document(&document);
+                collect_environment_usage(&YamlNode::Mapping(root), &registry, &mut usage);
+            }
+            usage
+        });
+        let dotenv_path = self.path.with_file_name(".env");
+        if usage.env_files.iter().any(|path| {
+            let preview = self.environment.preview(path);
+            let path = Path::new(&preview.text);
+            !preview.unresolved
+                && (path == dotenv_path || path == Path::new(".env") || path == Path::new("./.env"))
+        }) {
+            return HashSet::new();
+        }
+        let mut used: HashSet<_> = usage.names.iter().map(String::as_str).collect();
+        used.extend(COMPOSE_ENV_SETTINGS.iter().copied());
+        used.extend(self.services.iter().flat_map(|service| {
+            service
+                .variables
+                .iter()
+                .filter(|variable| variable.value.is_none())
+                .map(|variable| variable.key.as_str())
+        }));
+        dotenv.unused_variables(used)
     }
 
     pub fn dirty(&self) -> bool {
@@ -329,6 +388,7 @@ impl Compose {
             },
         });
         self.source = candidate;
+        self.environment_usage.take();
         self.services = views;
         self.has_include = has_include;
         self.resources = resources;
@@ -428,6 +488,7 @@ impl Compose {
         self.path = path;
         self.original.clone_from(&source);
         self.source = source;
+        self.environment_usage.take();
         self.services = services;
         self.has_include = has_include;
         self.resources = resources;
@@ -583,6 +644,7 @@ impl Compose {
             change,
         });
         self.source = candidate;
+        self.environment_usage.take();
         self.services = views;
         self.has_include = has_include;
         self.resources = resources;
@@ -621,6 +683,7 @@ impl Compose {
             }
         };
         self.source = yaml;
+        self.environment_usage.take();
         self.services = services;
         self.has_include = has_include;
         self.resources = resources;
@@ -958,6 +1021,81 @@ fn port_view(node: YamlNode) -> Port {
     }
 }
 
+fn collect_environment_usage(
+    node: &YamlNode,
+    registry: &AnchorRegistry,
+    usage: &mut EnvironmentUsage,
+) {
+    if let Some(scalar) = node.as_scalar() {
+        usage.names.extend(
+            environment::references(&scalar.as_string())
+                .into_iter()
+                .map(str::to_owned),
+        );
+    } else if let Some(sequence) = node.as_sequence() {
+        for value in sequence.values() {
+            collect_environment_usage(&value, registry, usage);
+        }
+    } else if let Some(mapping) = node.as_mapping() {
+        for entry in mapping.entries() {
+            let Some(value) = entry.value_node() else {
+                continue;
+            };
+            let key = entry
+                .key_node()
+                .and_then(|node| node.as_scalar().map(|key| key.as_string()));
+            match key.as_deref() {
+                Some("env_file") => collect_env_file_paths(
+                    resolve(registry, value.clone()),
+                    registry,
+                    &mut usage.env_files,
+                ),
+                Some("environment") => {
+                    collect_forwarded_variables(&resolve(registry, value.clone()), usage);
+                }
+                Some("build") => {
+                    if let Some(args) = resolve(registry, value.clone())
+                        .as_mapping()
+                        .and_then(|build| build.get("args"))
+                    {
+                        collect_forwarded_variables(&resolve(registry, args), usage);
+                    }
+                }
+                _ => {}
+            }
+            collect_environment_usage(&value, registry, usage);
+        }
+    }
+}
+
+fn collect_forwarded_variables(node: &YamlNode, usage: &mut EnvironmentUsage) {
+    usage.names.extend(
+        variable_view(node)
+            .into_iter()
+            .filter(|variable| variable.value.is_none())
+            .map(|variable| variable.key),
+    );
+}
+
+fn collect_env_file_paths(node: YamlNode, registry: &AnchorRegistry, paths: &mut Vec<String>) {
+    let mut add_path = |node: YamlNode| {
+        let path = node
+            .as_mapping()
+            .and_then(|mapping| mapping.get("path"))
+            .map_or(node, |path| resolve(registry, path));
+        if let Some(scalar) = path.as_scalar() {
+            paths.push(scalar.as_string());
+        }
+    };
+    if let Some(sequence) = node.as_sequence() {
+        for value in sequence.values() {
+            add_path(resolve(registry, value));
+        }
+    } else {
+        add_path(node);
+    }
+}
+
 fn variable_view(node: &YamlNode) -> Vec<Variable> {
     if let Some(map) = node.as_mapping() {
         map.entries()
@@ -1208,6 +1346,56 @@ mod tests {
             key: key.into(),
             value: value.map(str::to_owned),
         }
+    }
+
+    #[test]
+    fn finds_unused_dotenv_entries_across_compose_and_dotenv_references() {
+        let (folder, mut document) = fixture(concat!(
+            "services:\n",
+            "  app:\n",
+            "    image: 'nginx:$TAG' # $COMMENT\n",
+            "    command: '$$ESCAPED'\n",
+            "    environment: [INHERITED, FIXED=value, 'FROM_ENV=$ALIAS']\n",
+            "    build:\n",
+            "      context: .\n",
+            "      args: {BUILD_ARG: null}\n",
+            "    labels: {'$KEY_ONLY': value}\n",
+        ));
+        let path = folder.path().join(".env");
+        fs::write(
+            &path,
+            concat!(
+                "TAG=alpine\nINHERITED=x\nFIXED=x\n",
+                "BASE=x\nALIAS=$BASE\nUNUSED_REF=$ORPHAN\nORPHAN=x\n",
+                "COMMENT=x\nESCAPED=x\nKEY_ONLY=x\nBUILD_ARG=x\nCOMPOSE_PROFILES=dev\n",
+            ),
+        )
+        .unwrap();
+        document.reload_environment();
+        assert_eq!(
+            document.unused_environment_variables(),
+            HashSet::from([
+                "COMMENT",
+                "ESCAPED",
+                "FIXED",
+                "KEY_ONLY",
+                "ORPHAN",
+                "UNUSED_REF"
+            ]),
+        );
+
+        document
+            .edit(0, Edit::Image(Some("nginx:$UNUSED_REF".into())))
+            .unwrap();
+        let unused = document.unused_environment_variables();
+        assert!(unused.contains("TAG"));
+        assert!(!unused.contains("ORPHAN"));
+
+        let (folder, mut document) =
+            fixture("services:\n  app:\n    env_file:\n      - path: ${ENV_PATH:-./.env}\n");
+        fs::write(folder.path().join(".env"), "IMPORTED=demo\n").unwrap();
+        document.reload_environment();
+        assert!(document.unused_environment_variables().is_empty());
     }
 
     #[test]
@@ -1487,7 +1675,7 @@ mod tests {
         let (dir, mut document) = fixture(EXAMPLE);
         let path = document.path.clone();
         let dotenv = dir.path().join(".env");
-        let sidecar = dir.path().join(".compose.yaml.docksie-history.json");
+        let sidecar = dir.path().join(".compose.yaml.compeditor-history.json");
         assert!(!sidecar.exists());
         document.save_env_value("LOG_LEVEL", "debug").unwrap();
         document
@@ -1648,7 +1836,7 @@ mod tests {
     #[test]
     fn keeps_unreadable_history_file_when_saving_yaml() {
         let (dir, document) = fixture(EXAMPLE);
-        let sidecar = dir.path().join(".compose.yaml.docksie-history.json");
+        let sidecar = dir.path().join(".compose.yaml.compeditor-history.json");
         fs::write(&sidecar, "unreadable history").unwrap();
         let mut reopened = Compose::open(&document.path).unwrap();
         reopened
@@ -1678,7 +1866,7 @@ mod tests {
         let reserved = [
             "docker-compose.yml",
             ".env",
-            ".docker-compose.yml.docksie-history.json",
+            ".docker-compose.yml.compeditor-history.json",
         ];
         for existing in reserved {
             let directory = tempfile::tempdir().unwrap();

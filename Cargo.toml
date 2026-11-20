@@ -1,5 +1,5 @@
 [package]
-name = "docksie"
+name = "compeditor"
 version = "0.1.0"
 edition = "2024"
 
@@ -15,13 +15,13 @@ tempfile = "3.27"
 yaml-edit = "0.3.6"
 
 [package.metadata.packager]
-product-name = "Docksie"
-identifier = "io.docksie.app"
+product-name = "CompEditor"
+identifier = "io.compeditor.app"
 description = "Graphical Docker Compose editor"
 category = "DeveloperTool"
 icons = ["assets/icon.png"]
 out-dir = "target/release"
-binaries = [{ path = "docksie", main = true }]
+binaries = [{ path = "compeditor", main = true }]
 
 [package.metadata.packager.nsis]
 installer-icon = "assets/icon.ico"

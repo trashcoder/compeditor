@@ -921,6 +921,7 @@ impl Compose {
             change,
         });
         self.source = candidate;
+        self.environment_usage.take();
         self.services = services;
         self.has_include = has_include;
         self.resources = resources;
@@ -1715,7 +1716,7 @@ mod tests {
 
         let path = document.path.clone();
         document.save(path.clone()).unwrap();
-        if std::env::var_os("DOCKSIE_TEST_DOCKER_COMPOSE").is_some() {
+        if std::env::var_os("COMPEDITOR_TEST_DOCKER_COMPOSE").is_some() {
             let result = std::process::Command::new("docker")
                 .args(["compose", "-f"])
                 .arg(&path)
