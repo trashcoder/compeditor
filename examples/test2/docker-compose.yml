@@ -1,0 +1,3 @@
+services:
+  mariadb:
+    image: "mariadb:10.6.28-ubi9"

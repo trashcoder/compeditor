@@ -6,6 +6,8 @@ CompEditor is a local Docker Compose editor for Linux, macOS, and Windows. The p
 
 Make the Linux AppImage executable, then run it. On systems without FUSE, start it with `--appimage-extract-and-run`. The Linux file picker uses the desktop portal and falls back to Zenity.
 
+On X11, the AppImage uses the system's `libxkbcommon-x11.so.0` library. On Ubuntu and Debian, install `libxkbcommon-x11-0` if it is missing.
+
 ```sh
 chmod +x CompEditor-0.1.0-x86_64.AppImage
 ./CompEditor-0.1.0-x86_64.AppImage

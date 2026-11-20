@@ -410,7 +410,11 @@ services:
     image: ${_APP_IMAGE:-appwrite/appwrite}:${_APP_VERSION:-latest}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 1883) ? 0 : 1);"]
+      test:
+        - "CMD"
+        - "php"
+        - "-r"
+        - "exit(@fsockopen('127.0.0.1', 1883) ? 0 : 1);"
       interval: 5s
       timeout: 5s
       retries: 20
