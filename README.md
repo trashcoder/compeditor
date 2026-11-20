@@ -1,47 +1,49 @@
 # CompEditor
 
-CompEditor ist ein lokaler Docker-Compose-Editor für Linux, macOS und Windows. Die Projektleiste zeigt die Services, Netzwerke und Volumes einer YAML-Datei. Ziehe ihren rechten Rand, um die Breite zu ändern. Die Listen für Services, Netzwerke und Volumes lassen sich durchsuchen. Dort kannst du auch neue Einträge anlegen. In der Mitte sind Konfiguration, Verknüpfungen, weitere Compose-Parameter und verfügbare Docker-Hub-Infos über Reiter erreichbar. Die Sprache der Oberfläche lässt sich in den Einstellungen dauerhaft zwischen Deutsch und Englisch wechseln.
+CompEditor is a local Docker Compose editor for Linux, macOS, and Windows. The project sidebar lists the services, networks, and volumes in your Compose file. You can search each list, add entries, and resize the sidebar by dragging its right edge. The editor has tabs for configuration, connections, additional Compose settings, and Docker Hub information when available. You can switch between English and German in **File → Settings**. The app remembers your language preference.
 
-## Starten
+## Getting started
 
-Das Linux-AppImage ausführbar machen und starten. Auf Systemen ohne FUSE kann es mit `--appimage-extract-and-run` gestartet werden. Der Linux-Dateidialog verwendet das Desktop-Portal mit Zenity als Ausweichlösung.
+Make the Linux AppImage executable, then run it. On systems without FUSE, start it with `--appimage-extract-and-run`. The Linux file picker uses the desktop portal and falls back to Zenity.
 
 ```sh
 chmod +x CompEditor-0.1.0-x86_64.AppImage
 ./CompEditor-0.1.0-x86_64.AppImage
 ```
 
-`examples/compose.yaml` eignet sich zum Ausprobieren. Die Datei kann auch als Startargument übergeben werden. Formulare übernehmen Änderungen mit **Übernehmen** in das geöffnete Dokument. Im Menü **Datei** schreibt **Speichern** die Datei und **Speichern unter** wählt einen neuen Speicherort. Das Menü **Bearbeiten** bietet die Standardbefehle für das aktive Eingabefeld. CompEditor hält lokale Änderungen bei einem Speicherkonflikt im Arbeitsspeicher. **Datei schließen** führt zur Startansicht zurück und fragt bei ungespeicherten Änderungen nach.
+Try `examples/compose.yaml`. You can open it in the app or pass its path as a command-line argument. **Apply** puts form changes into the open document. In the **File** menu, **Save** writes the file and **Save as…** lets you choose another location. The **Edit** menu provides standard editing commands for the active text field. If a save conflict occurs, CompEditor keeps your local edits in memory. **Close file** returns to the start screen and prompts you about unsaved changes.
 
-Über **Neues Projekt** lässt sich in einem ausgewählten leeren Ordner ein neues Projekt anlegen. CompEditor erstellt dort `docker-compose.yml`, eine leere `.env` und die initiale Historie. Vorher wird geprüft, dass keine dieser drei Dateien bereits existiert; CompEditor überschreibt sie nicht.
+Choose **New project** and select an empty directory. CompEditor checks for existing files before creating `docker-compose.yml`, an empty `.env`, and the initial history.
 
-In der Projektleiste lassen sich über **Service hinzufügen** weitere Services anlegen. Der Name ist erforderlich, ein Image optional. Der neue Service wird direkt geöffnet und erscheint als Änderung in der Historie.
+Choose **Add service** in the project sidebar to create a service. Enter a name and optionally an image. The editor opens the new service immediately and records the addition in the history.
 
-Die Service-Details enthalten eine Dropdown-Auswahl für die Neustart-Richtlinie (`no`, `always`, `on-failure` und `unless-stopped`), einschließlich gängiger Retry-Limits für `on-failure`. Ein nicht gesetzter Wert lässt die Compose-Standardrichtlinie gelten.
+In the service editor, the restart policy dropdown offers `no`, `always`, `on-failure`, and `unless-stopped`, with common retry limits for `on-failure`. Leave the field unset to use the Compose default.
 
-Unter **Image-Info** erkennt CompEditor tabellarisch dokumentierte Umgebungsparameter aus der Docker-Hub-Beschreibung und öffnet sie über **Für Service konfigurieren** im Environment-Formular. Pflicht- oder optionale Angaben werden nur übernommen, wenn sie dort ausdrücklich markiert sind; sonst steht der Status auf **Nicht angegeben**. Docker-Hub-Beschreibungen sind Freitext und enthalten nicht immer eine solche Tabelle.
+The **Image info** tab can extract environment parameters from tables in a Docker Hub image description. Choose **Configure for service** to open a parameter in the environment form. The app shows **Required** or **Optional** when the documentation specifies it. Otherwise, it shows **Not specified**. Docker Hub descriptions are free-form, so some images lack a parameter table.
 
-Die Projektleiste zeigt die lokal deklarierten Services. Externe `include`- und `extends`-Dateien werden in dieser Version nicht geladen. Geteilte oder mehrdeutige YAML-Werte sind schreibgeschützt. Die App berücksichtigt den YAML-Aufbau. Eine vollständige Compose-Validierung ist separat mit `docker compose config --quiet` möglich.
+The sidebar shows services declared in the open Compose file. This version leaves external `include` and `extends` files unloaded. Shared or ambiguous YAML values are read-only. CompEditor respects the structure of the YAML file. For full Compose validation, run `docker compose config --quiet`.
 
-## Variablen aus `.env`
+## Variables from `.env`
 
-CompEditor lädt die `.env` neben der geöffneten Compose-Datei. In breiten Fenstern stehen die Variablen und ihre Werte standardmäßig rechts neben den Service-Details. Ziehe den linken Rand der Seitenleiste, um ihre Breite zu ändern. Lange Variablennamen werden umgebrochen. Gelb markiert Variablen, die in der geöffneten Compose-Datei weder direkt noch über einen anderen .env-Wert verwendet werden. Die Schaltfläche **.env** blendet den Bereich aus oder ein. In kleineren Fenstern öffnet sie die Werte vorübergehend anstelle des Editors. Ein Klick auf einen Namen oder Wert aktiviert die Bearbeitung direkt in der Wertzelle. In den Service-Details sind .env-Verweise direkt im jeweiligen Eintrag verlinkt. Fehlende oder nicht aufgelöste Variablen erscheinen rot. Ein Klick springt zur passenden Zeile in der .env-Ansicht. **In .env speichern** aktualisiert die Vorschau. Bei einer fehlenden Datei legt dieser Knopf die `.env` an. Bearbeitete Werte werden wörtlich gespeichert.
+CompEditor loads the `.env` file next to the open Compose file. In wide windows, variables and their values appear to the right of the service editor by default. Drag the panel's left edge to resize it. Long variable names wrap. Yellow highlights variables with no direct or indirect reference in the open Compose file.
 
-Die Vorschau verwendet die `.env` und Standardwerte aus den Compose-Ausdrücken. Beim Speichern der YAML-Datei bleiben die Platzhalter erhalten.
+The **.env** button shows or hides the panel. In smaller windows, it temporarily opens the variables in place of the editor. Click a name or value to edit the value in its cell. References in the service editor link directly to the matching row. Missing or unresolved variables appear in red. Enable **Show preview values** to see the unresolved notice.
 
-Für Docker-Hub-Images zeigt die Service-Detailansicht die Beschreibung, Pull-Zahl, Sterne und das letzte Aktualisierungsdatum an. Aufgelöste Image-Platzhalter aus `.env` werden ebenfalls berücksichtigt. Images anderer Registries werden nicht abgefragt; die Metadaten benötigen eine Internetverbindung.
+**Save to .env** writes edited values literally and refreshes the preview. If the file is missing, this action creates it. The preview uses values from `.env` and defaults in Compose expressions. Saving the YAML file preserves the placeholders.
 
-Im Image-Formular lässt sich für öffentliche Docker-Hub-Repositories ein Tag aus einer nach Aktualisierungsdatum sortierten Liste wählen. Die Auswahl ändert nur den Tag im Image-Namen; alle übrigen Compose-Einträge bleiben erhalten.
+For Docker Hub images, the service editor shows the description, pull count, stars, and last update date. Image names resolved from `.env` placeholders are supported. Metadata lookup requires an internet connection and covers Docker Hub images.
 
-## Historie
+For public Docker Hub repositories, the image form offers a list of tags sorted by update time. Selecting a tag updates the tag portion of the image name and preserves the other Compose entries.
 
-Die Schaltfläche **Historie** öffnet die Änderungsliste mit dem neuesten Stand oben. YAML-Änderungen erscheinen zunächst als Entwürfe und werden beim Speichern in die Historie übernommen. Änderungen an der `.env` werden beim Speichern des Werts festgehalten.
+## History
 
-**Wiederherstellen** setzt die YAML-Datei und die `.env` sofort auf den gewählten gespeicherten Stand. Damit werden alle dazwischenliegenden Änderungen gemeinsam rückgängig gemacht. CompEditor behält den geöffneten Service bei und springt rechts zur betroffenen Variable. Spätere Stände sind bis zur nächsten Änderung oder bis zum Schließen der Datei noch anwählbar. Beim erneuten Öffnen endet die Historie am zuletzt gewählten Stand. Beim Sprung zu einem Entwurf bleiben die Dateien auf der Festplatte bis zum nächsten Speichern unverändert.
+**History** opens the change list with the newest entry first. YAML edits appear initially as drafts and become history entries when you save the Compose file. Edits to `.env` are recorded when you save the value.
 
-CompEditor speichert die Historie pro Compose-Datei. Zu `compose.yaml` gehört `.compose.yaml.compeditor-history.json` im selben Ordner. Die Verlaufsdatei enthält frühere YAML- und `.env`-Inhalte einschließlich ihrer Werte.
+**Restore** immediately restores the YAML file and `.env` to the selected saved revision, undoing the intervening changes together. CompEditor keeps the current service open and jumps to the affected variable when it can. Later revisions remain available until you make another change or close the file. When you reopen the file, the history ends at the last selected revision. Selecting a draft updates the document in memory. The files on disk change when you save.
 
-## Bauen und testen
+CompEditor stores history beside each Compose file. For `compose.yaml`, the history file is `.compose.yaml.compeditor-history.json`. It contains earlier YAML and `.env` contents, including their values.
+
+## Build and test
 
 ```sh
 cargo run --locked -- examples/compose.yaml
@@ -49,4 +51,6 @@ cargo test --locked
 cargo build --release --locked
 ```
 
-Unter Linux erstellt `scripts/package-appimage.sh` das AppImage in `dist/`. Für breite Linux-Kompatibilität wird das Binärprogramm im Workflow unter Ubuntu 22.04 gebaut. Unter macOS und Windows erzeugt `cargo-packager` die nativen Pakete. Der Workflow **Build CompEditor** stellt sie als Artefakte für Apple Silicon, Intel-Macs und Windows x86_64 bereit. Die Artefakte werden ohne Herausgebersignatur erstellt.
+On Linux, `scripts/package-appimage.sh` builds the AppImage in `dist/`. The GitHub Actions workflow builds it on Ubuntu 22.04 for broad Linux compatibility. On macOS and Windows, `cargo-packager` creates the native packages.
+
+A push to `main` runs **Build CompEditor** for Linux x86-64, macOS on Apple Silicon and Intel, and Windows x86-64. After all four targets pass their builds and tests, the workflow publishes a GitHub prerelease tagged `dev-<commit-sha>`. Each prerelease contains one AppImage, two DMGs, and one Windows installer. The packages are unsigned.

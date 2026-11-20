@@ -65,3 +65,56 @@ jobs:
           name: CompEditor-${{ matrix.artifact }}
           path: ${{ matrix.files }}
           if-no-files-found: error
+
+  dev-release:
+    needs: packages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: compeditor-dev-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: CompEditor-*
+          path: packages
+      - name: Collect release packages
+        shell: bash
+        run: |
+          shopt -s nullglob
+          mkdir release
+          copy_package() {
+            local destination=$1
+            shift
+            if [[ $# -ne 1 || ! -s ${1:-} ]]; then
+              echo "Expected exactly one nonempty package for $destination" >&2
+              return 1
+            fi
+            cp -- "$1" "release/$destination"
+          }
+          copy_package CompEditor-dev-linux-x86_64.AppImage packages/CompEditor-linux-x86_64/*.AppImage
+          copy_package CompEditor-dev-macos-arm64.dmg packages/CompEditor-macos-arm64/*.dmg
+          copy_package CompEditor-dev-macos-x86_64.dmg packages/CompEditor-macos-x86_64/*.dmg
+          copy_package CompEditor-dev-windows-x86_64-setup.exe packages/CompEditor-windows-x86_64/*setup.exe
+      - name: Publish development prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="dev-${GITHUB_SHA}"
+          if is_draft=$(gh release view "$tag" --json isDraft --jq .isDraft); then
+            if [[ "$is_draft" == false ]]; then
+              echo "Development prerelease $tag is already published."
+              exit 0
+            fi
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --draft --prerelease --latest=false \
+              --title "CompEditor Dev (${GITHUB_SHA:0:12})" \
+              --notes "Development build from commit $GITHUB_SHA."
+          fi
+
+          gh release upload "$tag" release/* --clobber
+          gh release edit "$tag" --draft=false --prerelease --latest=false
