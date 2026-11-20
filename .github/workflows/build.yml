@@ -34,7 +34,7 @@ jobs:
             files: target/release/*setup.exe
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: rustup update stable && rustup default stable
         shell: bash
       - name: Install Linux build and smoke test dependencies
@@ -60,7 +60,7 @@ jobs:
       - name: Build native package
         if: runner.os != 'Linux'
         run: cargo packager --release --formats ${{ matrix.package }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: CompEditor-${{ matrix.artifact }}
           path: ${{ matrix.files }}
@@ -76,7 +76,7 @@ jobs:
       group: compeditor-dev-${{ github.sha }}
       cancel-in-progress: false
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: CompEditor-*
           path: packages
